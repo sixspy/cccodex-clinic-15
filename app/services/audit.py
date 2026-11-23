@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.db import get_db
+from app.services import archive as archive_svc
 
 
 def write_event(
@@ -68,13 +69,23 @@ def summary(db_path: str | None = None) -> dict:
 def purge_old(keep_days: int = 30, db_path: str | None = None) -> dict:
     keep_days = max(1, int(keep_days or 30))
     with get_db(db_path) as conn:
+        archive_svc.guard_live_rewrite(conn)
+        pinned = archive_svc.pinned_last_id(conn)
+        window = f"-{keep_days} days"
         before = conn.execute("SELECT COUNT(*) AS c FROM audit_events").fetchone()["c"]
+        blocked = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM audit_events
+            WHERE created_at < datetime('now', ?) AND id <= ?
+            """,
+            (window, pinned),
+        ).fetchone()["c"]
         conn.execute(
             """
             DELETE FROM audit_events
-            WHERE created_at < datetime('now', ?)
+            WHERE created_at < datetime('now', ?) AND id > ?
             """,
-            (f"-{keep_days} days",),
+            (window, pinned),
         )
         after = conn.execute("SELECT COUNT(*) AS c FROM audit_events").fetchone()["c"]
         removed = before - after
@@ -82,7 +93,12 @@ def purge_old(keep_days: int = 30, db_path: str | None = None) -> dict:
         "清理审计",
         "audit",
         0,
-        f"保留{keep_days}天，删除{removed}条",
+        f"保留{keep_days}天，删除{removed}条，挡住已归档{blocked}条",
         db_path=db_path,
     )
-    return {"removed": removed, "keep_days": keep_days, "remaining": after}
+    return {
+        "removed": removed,
+        "keep_days": keep_days,
+        "remaining": after,
+        "blocked_archived": blocked,
+    }

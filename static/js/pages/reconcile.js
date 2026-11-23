@@ -64,8 +64,12 @@ export async function renderReconcile(el) {
     <div class="card">
       <h2>最近审计</h2>
       <p class="muted">合计 ${audits.summary?.total || 0} 条。突变操作会写入审计轨迹。</p>
+      <p>归档键号：<code>${escapeHtml(audits.archive_head?.archive_key || '未归档')}</code>
+        ${audits.archive_head?.fingerprint_short ? `· 指纹 ${escapeHtml(audits.archive_head.fingerprint_short)}` : ''}
+        ${chip(audits.archive_head?.status || '未归档')}
+        ${audits.archive_head?.last_event_id ? `· 钉至行次 #${audits.archive_head.last_event_id}` : ''}</p>
       <table>
-        <thead><tr><th>时间</th><th>动作</th><th>实体</th><th>详情</th></tr></thead>
+        <thead><tr><th>时间</th><th>动作</th><th>实体</th><th>详情</th><th>归档落点</th></tr></thead>
         <tbody>
           ${(audits.items || []).map((a) => `
             <tr>
@@ -73,6 +77,7 @@ export async function renderReconcile(el) {
               <td>${escapeHtml(a.action)}</td>
               <td>${escapeHtml(a.entity_type)} #${a.entity_id}</td>
               <td>${escapeHtml(a.detail || '')}</td>
+              <td>${chip(a.archived ? '已钉' : '活审计')}</td>
             </tr>`).join('')}
         </tbody>
       </table>

@@ -103,6 +103,33 @@ CREATE TABLE IF NOT EXISTS app_settings (
   label TEXT NOT NULL
 );
 
+-- 审计归档（甲路·物化包）：归档头，一键一包，键指纹钉死
+CREATE TABLE IF NOT EXISTS audit_archives (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  archive_key TEXT NOT NULL UNIQUE,
+  fingerprint TEXT NOT NULL,
+  event_count INTEGER NOT NULL,
+  first_event_id INTEGER NOT NULL,
+  last_event_id INTEGER NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  actor TEXT NOT NULL DEFAULT 'admin',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 审计归档落点行：物化包本体，读轨只认本表
+CREATE TABLE IF NOT EXISTS audit_archive_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  archive_id INTEGER NOT NULL REFERENCES audit_archives(id),
+  event_id INTEGER NOT NULL,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id INTEGER NOT NULL DEFAULT 0,
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(archive_id, event_id)
+);
+
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

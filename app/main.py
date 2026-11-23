@@ -9,6 +9,7 @@ from itsdangerous import BadSignature, URLSafeSerializer
 
 from app.config import Config
 from app.seed import seed_if_needed
+from app.services import archive as archive_svc
 from app.services import audit as audit_svc
 from app.services import backfill as backfill_svc
 from app.services import protocols as protocols_svc
@@ -445,9 +446,41 @@ class Api:
         _require()
         q = _query()
         limit = int(q.get("limit") or 100)
+        head = archive_svc.head()
+        pinned = int(head.get("last_event_id") or 0)
+        items = audit_svc.list_events(limit)
+        for it in items:
+            it["archived"] = bool(it["id"] <= pinned)
         return _json(
-            {"items": audit_svc.list_events(limit), "summary": audit_svc.summary()}
+            {
+                "items": items,
+                "summary": audit_svc.summary(),
+                "archive_head": head,
+            }
         )
+
+    @cherrypy.expose
+    @_wrap
+    def archives(self, archive_id=None):
+        _require()
+        method = cherrypy.request.method
+        if archive_id is None:
+            if method == "GET":
+                return _json(
+                    {
+                        "items": archive_svc.list_archives(),
+                        "badge": archive_svc.badge(),
+                    }
+                )
+            if method == "POST":
+                body = _read_json()
+                return _json(
+                    archive_svc.create_archive(note=body.get("note", ""))
+                )
+            return _json({"error": "方法不允许"}, 405)
+        if method == "GET":
+            return _json(archive_svc.get_archive(int(archive_id)))
+        return _json({"error": "未知审计归档路由"}, 404)
 
 
 class ApiMount:
@@ -521,6 +554,11 @@ class ApiMount:
             return api.settings(action=parts[1])
         if path == "/audits" or path.startswith("/audits"):
             return api.audits()
+        if path == "/archives" or path.startswith("/archives/"):
+            parts = path.strip("/").split("/")
+            if len(parts) == 1:
+                return api.archives()
+            return api.archives(archive_id=parts[1])
         return _json({"error": f"未知接口 {path}"}, 404)
 
 
